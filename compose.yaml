@@ -1,0 +1,110 @@
+name: campus-charge
+
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: campus_charge
+      POSTGRES_USER: campus_charge
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-campus-charge-demo}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campus_charge -d campus_charge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -p 1883 -t '$$SYS/broker/version' -C 1 -W 3 >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/campus_charge
+      DB_USERNAME: campus_charge
+      DB_PASSWORD: ${DB_PASSWORD:-campus-charge-demo}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      SESSION_COOKIE_SECURE: "false"
+      MQTT_ENABLED: "true"
+      MQTT_URL: tcp://mqtt:1883
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-disabled}
+      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:-}
+      VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
+      VNPAY_URL: ${VNPAY_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      VNPAY_RETURN_URL: ${VNPAY_RETURN_URL:-http://localhost:5173/payment/return}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/api/auth/csrf || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  simulator:
+    build:
+      context: ./backend
+    command: ["java", "-jar", "/app/app.jar", "--spring.profiles.active=simulator"]
+    environment:
+      MQTT_ENABLED: "true"
+      MQTT_URL: tcp://mqtt:1883
+      SIMULATOR_PORTS: ${SIMULATOR_PORTS:-}
+      DB_URL: jdbc:postgresql://postgres:5432/campus_charge
+      DB_USERNAME: campus_charge
+      DB_PASSWORD: ${DB_PASSWORD:-campus-charge-demo}
+      SIMULATOR_JOURNAL_PATH: /data/simulator.json
+      SIMULATOR_BATTERY_STEP_PERCENT: ${SIMULATOR_BATTERY_STEP_PERCENT:-2}
+      SIMULATOR_CAPACITY_KWH: ${SIMULATOR_CAPACITY_KWH:-3}
+      SIMULATOR_TICK_MS: ${SIMULATOR_TICK_MS:-1500}
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /data/simulator.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    depends_on:
+      mqtt:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - simulator-data:/data
+
+  mqtt-tools:
+    image: eclipse-mosquitto:2
+    entrypoint: ["/bin/sh", "-c", "mosquitto_pub -h mqtt -q 1 -t \"$$TOPIC\" -m \"$$SCENARIO\""]
+    environment:
+      SCENARIO: ${SCENARIO:-}
+      TOPIC: ${SCENARIO_TOPIC:-}
+    profiles: [tools]
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+
+volumes:
+  postgres-data:
+  simulator-data:

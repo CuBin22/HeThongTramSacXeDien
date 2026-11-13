@@ -1,0 +1,9 @@
+services:
+  postgres:
+    ports: !reset []
+  mqtt:
+    ports: !reset []
+  backend:
+    environment:
+      SESSION_COOKIE_SECURE: "true"
+    ports: !reset []

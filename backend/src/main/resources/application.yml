@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: hospital-charge
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/campus_charge}
+    username: ${DB_USERNAME:campus_charge}
+    password: ${DB_PASSWORD:}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      accept-float-as-int: false
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 16MB
+server:
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:false}
+device:
+  mqtt:
+    enabled: ${MQTT_ENABLED:false}
+    url: ${MQTT_URL:tcp://localhost:1883}
+    username: ${MQTT_USERNAME:}
+    password: ${MQTT_PASSWORD:}
+simulator:
+  ports: ${SIMULATOR_PORTS:}
+  journal-path: ${SIMULATOR_JOURNAL_PATH:./data/simulator.json}
+  battery-step-percent: ${SIMULATOR_BATTERY_STEP_PERCENT:2}
+  tick-ms: ${SIMULATOR_TICK_MS:1000}
+payment:
+  provider: ${PAYMENT_PROVIDER:disabled}
+vnpay:
+  tmn-code: ${VNPAY_TMN_CODE:}
+  hash-secret: ${VNPAY_HASH_SECRET:}
+  url: ${VNPAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+  return-url: ${VNPAY_RETURN_URL:http://localhost:5173/payment/return}
